@@ -7,7 +7,7 @@ const merge = require('merge-deep')
 const req = request.defaults({
   jar: true,
   headers: {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36'
   }
 })
 
@@ -136,6 +136,15 @@ const get_listing = function(url, cb) {
   })
 }
 
+const clean_price = function(s) {
+  s = s.split('+')[0]
+  s = s.split('-')[0]
+
+  s = s.replace('$','').replace(',','')
+
+  return parseInt(s, 10)
+}
+
 const get_tax_history = function(url, cb) {
   req({
     url: url,
@@ -150,9 +159,9 @@ const get_tax_history = function(url, cb) {
     $('tbody tr').each(function(i, elem) {
       tax_history.push({
 	year: $(this).children().eq(0).text(),
-	property_taxes: $(this).children().eq(1).text(),
+	property_taxes: clean_price($(this).children().eq(1).text()),
 	property_taxes_change: $(this).children().eq(2).text(),
-	tax_assessment: $(this).children().eq(3).text(),
+	tax_assessment: clean_price($(this).children().eq(3).text()),
 	tax_asessment_change: $(this).children().eq(4).text()
       })
     })
@@ -176,7 +185,7 @@ const get_price_history = function(url, cb) {
       price_history.push({
 	date: $(this).children().eq(0).text(),
 	event: $(this).children().eq(1).text(),
-	price: $(this).children().eq(2).text(),
+	price: clean_price($(this).children().eq(2).text()),
 	price_sqft: $(this).children().eq(3).text(),
 	source: $(this).children().eq(4).text()
       })
@@ -199,11 +208,16 @@ const info = function(zpid, cb) {
     if (err)
       return cb(err)
 
+    /* const fs = require('fs')
+     * fs.writeFile('./index.html', html)
+     */
     const $ = cheerio.load(html)
 
     let result = {
       zpid: zpid,
       url: url,
+      rent_zestimate: null,
+      zestimate: null,
       price_history: [],
       tax_history: [],
       facts: {}
@@ -230,6 +244,15 @@ const info = function(zpid, cb) {
 
       result.facts[key] = value
     })
+
+    const footer_summary = $('footer .zsg-layout-top').text()
+    const zestimate_re = /is \$([0-9,]*)/gi
+    const zestimate_result = zestimate_re.exec(footer_summary)
+    result.zestimate = clean_price(zestimate_result[1])
+
+    const rent_zestimate_re = /Rent Zestimate. is \$([0-9,]*)/gi
+    const rent_zestimate_result = rent_zestimate_re.exec(footer_summary)
+    result.rent_zestimate = clean_price(rent_zestimate_result[1])
 
     const price_re = /ajaxURL:\"([^\"]+)\",[^{}]*,jsModule:\"z-hdp-price-history\"/gi
     const price_result = price_re.exec(html)
@@ -262,14 +285,4 @@ const info = function(zpid, cb) {
 module.exports = {
   search: search,
   info: info
-}
-
-if (!module.parent) {
-  /* let zpid = 2093138889
-   * info(zpid, function(err, info) {
-   *   if (err)
-   *     console.log(err)
-
-   *   console.log(info)
-   * })*/
 }
